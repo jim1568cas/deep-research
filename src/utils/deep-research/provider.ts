@@ -52,7 +52,9 @@ export async function createAIProvider({
       baseURL,
       apiKey,
     });
-    return model.startsWith("gpt-4o")
+    return model.startsWith("gpt-4o") ||
+      model.startsWith("gpt-4.1") ||
+      model.startsWith("gpt-5")
       ? openai.responses(model)
       : openai(model, settings);
   } else if (provider === "anthropic") {
@@ -70,6 +72,13 @@ export async function createAIProvider({
       apiKey,
     });
     return deepseek(model, settings);
+  } else if (provider === "atlascloud") {
+    const { createOpenAI } = await import("@ai-sdk/openai");
+    const atlascloud = createOpenAI({
+      baseURL,
+      apiKey,
+    });
+    return atlascloud(model, settings);
   } else if (provider === "xai") {
     const { createXai } = await import("@ai-sdk/xai");
     const xai = createXai({

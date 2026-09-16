@@ -16,6 +16,8 @@
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-F69652?style=flat&logo=cloudflare&logoColor=white)](./docs/How-to-deploy-to-Cloudflare-Pages.md)
 [![PWA](https://img.shields.io/badge/PWA-blue?style=flat&logo=pwa&logoColor=white)](https://research.u14.app/)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/u14app/deep-research)
+
 </div>
 
 **Lightning-Fast Deep Research Report**
@@ -28,8 +30,8 @@ Deep Research uses a variety of powerful AI models to generate in-depth research
 - **Multi-platform Support:** Supports rapid deployment to Vercel, Cloudflare and other platforms.
 - **Powered by AI:** Utilizes the advanced AI models for accurate and insightful analysis.
 - **Privacy-Focused:** Your data remains private and secure, as all data is stored locally on your browser.
-- **Support for Multi-LLM:** Supports a variety of mainstream large language models, including Gemini, OpenAI, Anthropic, Deepseek, Grok, Mistral, Azure OpenAI, any OpenAI Compatible LLMs, OpenRouter, Ollama, etc.
-- **Support Web Search:** Supports search engines such as Searxng, Tavily, Firecrawl, Exa, Bocha, etc., allowing LLMs that do not support search to use the web search function more conveniently.
+- **Support for Multi-LLM:** Supports a variety of mainstream large language models, including Gemini, OpenAI, Anthropic, Deepseek, Atlas Cloud, Grok, Mistral, Azure OpenAI, any OpenAI Compatible LLMs, OpenRouter, Ollama, etc.
+- **Support Web Search:** Supports search engines such as Searxng, Tavily, Firecrawl, fastCRW, Exa, Bocha, Brave, etc., allowing LLMs that do not support search to use the web search function more conveniently.
 - **Thinking & Task Models:** Employs sophisticated "Thinking" and "Task" models to balance depth and speed, ensuring high-quality results quickly. Support switching research models.
 - **Support Further Research:** You can refine or adjust the research content at any stage of the project and support re-research from that stage.
 - **Local Knowledge Base:** Supports uploading and processing text, Office, PDF and other resource files to generate local knowledge base.
@@ -228,13 +230,13 @@ Body:
 interface SSEConfig {
   // Research topic
   query: string;
-  // AI provider, Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
+  // AI provider, Possible values ​​include: google, openai, anthropic, deepseek, atlascloud, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
   provider: string;
   // Thinking model id
   thinkingModel: string;
   // Task model id
   taskModel: string;
-  // Search provider, Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
+  // Search provider, Possible values ​​include: model, tavily, firecrawl, crw, exa, bocha, searxng
   searchProvider: string;
   // Response Language, also affects the search language. (optional)
   language?: string;
@@ -322,10 +324,10 @@ If your server sets `ACCESS_PASSWORD`, the MCP service will be protected and you
 
 ```bash
 # MCP Server AI provider
-# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
+# Possible values ​​include: google, openai, anthropic, deepseek, atlascloud, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
 MCP_AI_PROVIDER=google
 # MCP Server search provider. Default, `model`
-# Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
+# Possible values ​​include: model, tavily, firecrawl, crw, exa, bocha, searxng
 MCP_SEARCH_PROVIDER=tavily
 # MCP Server thinking model id, the core model used in deep research.
 MCP_THINKING_MODEL=gemini-2.0-flash-thinking-exp
@@ -338,13 +340,11 @@ MCP_TASK_MODEL=gemini-2.0-flash-exp
 ## 🪄 How it works
 
 1. **Research topic**
-
    - Input research topic
    - Use local research resources (optional)
    - Start thinking (or rethinking)
 
 2. **Propose your ideas**
-
    - The system asks questions
      - Answer system questions (optional)
      - Write a research plan (or rewrite the research plan)
@@ -353,7 +353,6 @@ MCP_TASK_MODEL=gemini-2.0-flash-exp
      - The system generates SERP queries
 
 3. **Information collection**
-
    - Initial research
      - Retrieve local research resources based on SERP queries
      - Collect information from the Internet based on SERP queries
@@ -362,7 +361,6 @@ MCP_TASK_MODEL=gemini-2.0-flash-exp
      - Start a new round of information collection (the process is the same as the initial research)
 
 4. **Generate Final Report**
-
    - Make a writing request (optional)
    - Summarize all research materials into a comprehensive Markdown report
    - Regenerate research report (optional)
@@ -449,10 +447,6 @@ For major changes, please open an issue first to discuss your proposed changes.
 ## ✉️ Contact
 
 If you have any questions, suggestions, or feedback, please create a new [issue](https://github.com/u14app/deep-research/issues).
-
-## 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=u14app/deep-research&type=Date)](https://www.star-history.com/#u14app/deep-research&Date)
 
 ## 📝 License
 

@@ -13,6 +13,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "";
+const ATLASCLOUD_API_KEY = process.env.ATLASCLOUD_API_KEY || "";
 const XAI_API_KEY = process.env.XAI_API_KEY || "";
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || "";
 const AZURE_API_KEY = process.env.AZURE_API_KEY || "";
@@ -23,6 +24,7 @@ const OPENAI_COMPATIBLE_API_KEY = process.env.OPENAI_COMPATIBLE_API_KEY || "";
 // Search provider API key
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY || "";
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "";
+const CRW_API_KEY = process.env.CRW_API_KEY || "";
 const EXA_API_KEY = process.env.EXA_API_KEY || "";
 const BOCHA_API_KEY = process.env.BOCHA_API_KEY || "";
 // Disabled Provider
@@ -62,25 +64,25 @@ export async function middleware(request: NextRequest) {
   const hasDisabledGeminiModel = () => {
     if (request.method.toUpperCase() === "GET") return false;
     const { availableModelList, disabledModelList } = getCustomModelList(
-      MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : []
+      MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : [],
     );
     const isAvailableModel = availableModelList.some((availableModel) =>
-      request.nextUrl.pathname.includes(`models/${availableModel}:`)
+      request.nextUrl.pathname.includes(`models/${availableModel}:`),
     );
     if (isAvailableModel) return false;
     if (disabledModelList.includes("all")) return true;
     return disabledModelList.some((disabledModel) =>
-      request.nextUrl.pathname.includes(`models/${disabledModel}:`)
+      request.nextUrl.pathname.includes(`models/${disabledModel}:`),
     );
   };
   const hasDisabledAIModel = async () => {
     if (request.method.toUpperCase() === "GET") return false;
     const { model = "" } = await request.json();
     const { availableModelList, disabledModelList } = getCustomModelList(
-      MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : []
+      MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : [],
     );
     const isAvailableModel = availableModelList.some(
-      (availableModel) => availableModel === model
+      (availableModel) => availableModel === model,
     );
     if (isAvailableModel) return false;
     if (disabledModelList.includes("all")) return true;
@@ -97,7 +99,7 @@ export async function middleware(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(GOOGLE_GENERATIVE_AI_API_KEY);
@@ -105,11 +107,11 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set(
           "x-goog-api-client",
-          request.headers.get("x-goog-api-client") || "genai-js/0.24.0"
+          request.headers.get("x-goog-api-client") || "genai-js/0.24.0",
         );
         requestHeaders.set("x-goog-api-key", apiKey);
         return NextResponse.next({
@@ -122,7 +124,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -134,14 +136,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("openrouter") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(OPENROUTER_API_KEY);
@@ -149,7 +151,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -162,7 +164,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -174,14 +176,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("openaicompatible") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(OPENAI_COMPATIBLE_API_KEY);
@@ -189,7 +191,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -202,7 +204,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -214,14 +216,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("openai") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(OPENAI_API_KEY);
@@ -229,7 +231,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -242,7 +244,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -257,7 +259,7 @@ export async function middleware(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(ANTHROPIC_API_KEY);
@@ -265,12 +267,12 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("x-api-key", apiKey);
         requestHeaders.set(
           "anthropic-version",
-          request.headers.get("anthropic-version") || "2023-06-01"
+          request.headers.get("anthropic-version") || "2023-06-01",
         );
         return NextResponse.next({
           request: {
@@ -282,7 +284,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -294,14 +296,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("deepseek") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(DEEPSEEK_API_KEY);
@@ -309,7 +311,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -322,7 +324,47 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
+        );
+      }
+    }
+  }
+  if (request.nextUrl.pathname.startsWith("/api/ai/atlascloud")) {
+    const authorization = request.headers.get("authorization") || "";
+    const isDisabledModel = await hasDisabledAIModel();
+    if (
+      !verifySignature(
+        authorization.substring(7),
+        accessPassword,
+        Date.now(),
+      ) ||
+      disabledAIProviders.includes("atlascloud") ||
+      isDisabledModel
+    ) {
+      return NextResponse.json(
+        { error: ERRORS.NO_PERMISSIONS },
+        { status: 403 },
+      );
+    } else {
+      const apiKey = multiApiKeyPolling(ATLASCLOUD_API_KEY);
+      if (apiKey) {
+        const requestHeaders = new Headers();
+        requestHeaders.set(
+          "Content-Type",
+          request.headers.get("Content-Type") || "application/json",
+        );
+        requestHeaders.set("Authorization", `Bearer ${apiKey}`);
+        return NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
+      } else {
+        return NextResponse.json(
+          {
+            error: ERRORS.NO_API_KEY,
+          },
+          { status: 500 },
         );
       }
     }
@@ -334,14 +376,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("xai") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(XAI_API_KEY);
@@ -349,7 +391,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -362,7 +404,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -374,14 +416,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("mistral") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(MISTRAL_API_KEY);
@@ -389,7 +431,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -402,7 +444,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -417,7 +459,7 @@ export async function middleware(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(AZURE_API_KEY);
@@ -425,7 +467,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("api-key", apiKey);
         return NextResponse.next({
@@ -438,7 +480,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -450,14 +492,14 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("google-vertex") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = await generateAuthToken({
@@ -470,7 +512,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -483,7 +525,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -496,20 +538,20 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("pollinations") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const requestHeaders = new Headers();
       requestHeaders.set(
         "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
+        request.headers.get("Content-Type") || "application/json",
       );
       return NextResponse.next({
         request: {
@@ -524,22 +566,24 @@ export async function middleware(request: NextRequest) {
     const isDisabledModel = await hasDisabledAIModel();
     if (
       !verifySignature(
-        authorization.substring(7),
+        authorization.startsWith("Bearer ")
+          ? authorization.substring(7)
+          : authorization,
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledAIProviders.includes("ollama") ||
       isDisabledModel
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const requestHeaders = new Headers();
       requestHeaders.set(
         "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
+        request.headers.get("Content-Type") || "application/json",
       );
       return NextResponse.next({
         request: {
@@ -555,13 +599,13 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledSearchProviders.includes("tavily")
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(TAVILY_API_KEY);
@@ -569,7 +613,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -582,7 +626,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -594,13 +638,13 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledSearchProviders.includes("firecrawl")
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(FIRECRAWL_API_KEY);
@@ -608,7 +652,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -621,7 +665,46 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
+        );
+      }
+    }
+  }
+  if (request.nextUrl.pathname.startsWith("/api/search/crw")) {
+    const authorization = request.headers.get("authorization") || "";
+    if (
+      request.method.toUpperCase() !== "POST" ||
+      !verifySignature(
+        authorization.substring(7),
+        accessPassword,
+        Date.now(),
+      ) ||
+      disabledSearchProviders.includes("crw")
+    ) {
+      return NextResponse.json(
+        { error: ERRORS.NO_PERMISSIONS },
+        { status: 403 },
+      );
+    } else {
+      const apiKey = multiApiKeyPolling(CRW_API_KEY);
+      if (apiKey) {
+        const requestHeaders = new Headers();
+        requestHeaders.set(
+          "Content-Type",
+          request.headers.get("Content-Type") || "application/json",
+        );
+        requestHeaders.set("Authorization", `Bearer ${apiKey}`);
+        return NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
+      } else {
+        return NextResponse.json(
+          {
+            error: ERRORS.NO_API_KEY,
+          },
+          { status: 500 },
         );
       }
     }
@@ -633,13 +716,13 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledSearchProviders.includes("exa")
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(EXA_API_KEY);
@@ -647,7 +730,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -660,7 +743,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -672,13 +755,13 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledSearchProviders.includes("bocha")
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const apiKey = multiApiKeyPolling(BOCHA_API_KEY);
@@ -686,7 +769,7 @@ export async function middleware(request: NextRequest) {
         const requestHeaders = new Headers();
         requestHeaders.set(
           "Content-Type",
-          request.headers.get("Content-Type") || "application/json"
+          request.headers.get("Content-Type") || "application/json",
         );
         requestHeaders.set("Authorization", `Bearer ${apiKey}`);
         return NextResponse.next({
@@ -699,7 +782,7 @@ export async function middleware(request: NextRequest) {
           {
             error: ERRORS.NO_API_KEY,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
     }
@@ -711,19 +794,19 @@ export async function middleware(request: NextRequest) {
       !verifySignature(
         authorization.substring(7),
         accessPassword,
-        Date.now()
+        Date.now(),
       ) ||
       disabledSearchProviders.includes("searxng")
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const requestHeaders = new Headers();
       requestHeaders.set(
         "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
+        request.headers.get("Content-Type") || "application/json",
       );
       requestHeaders.delete("Authorization");
       return NextResponse.next({
@@ -741,13 +824,13 @@ export async function middleware(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const requestHeaders = new Headers();
       requestHeaders.set(
         "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
+        request.headers.get("Content-Type") || "application/json",
       );
       requestHeaders.delete("Authorization");
       return NextResponse.next({
@@ -767,13 +850,13 @@ export async function middleware(request: NextRequest) {
     if (authorization !== accessPassword) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
+        { status: 403 },
       );
     } else {
       const requestHeaders = new Headers();
       requestHeaders.set(
         "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
+        request.headers.get("Content-Type") || "application/json",
       );
       requestHeaders.delete("Authorization");
       return NextResponse.next({
@@ -794,13 +877,13 @@ export async function middleware(request: NextRequest) {
           error_description: ERRORS.NO_PERMISSIONS.message,
           error_uri: request.nextUrl,
         },
-        { headers: responseHeaders, status: 401 }
+        { headers: responseHeaders, status: 401 },
       );
     } else {
       const requestHeaders = new Headers();
       requestHeaders.set(
         "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
+        request.headers.get("Content-Type") || "application/json",
       );
       requestHeaders.delete("Authorization");
       return NextResponse.next({

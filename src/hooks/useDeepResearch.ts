@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { streamText, smoothStream, type JSONValue, type Tool } from "ai";
+import {
+  streamText,
+  smoothStream,
+  type JSONValue,
+  type Tool,
+  type UserContent,
+} from "ai";
 import { parsePartialJson } from "@ai-sdk/ui-utils";
 import { openai } from "@ai-sdk/openai";
 import { type GoogleGenerativeAIProviderMetadata } from "@ai-sdk/google";
@@ -12,9 +18,13 @@ import { useTaskStore } from "@/store/task";
 import { useHistoryStore } from "@/store/history";
 import { useSettingStore } from "@/store/setting";
 import { useKnowledgeStore } from "@/store/knowledge";
-import { outputGuidelinesPrompt } from "@/constants/prompts";
+import {
+  parseDeepResearchPromptOverrides,
+  type DeepResearchPromptOverrides,
+} from "@/constants/prompts";
 import {
   getSystemPrompt,
+  getOutputGuidelinesPrompt,
   generateQuestionsPrompt,
   writeReportPlanPrompt,
   generateSerpQueriesPrompt,
@@ -58,16 +68,153 @@ function useDeepResearch() {
   const { search } = useWebSearch();
   const [status, setStatus] = useState<string>("");
 
+  function getPromptOverrides() {
+    const { deepResearchPromptOverrides } = useSettingStore.getState();
+    try {
+      return parseDeepResearchPromptOverrides(deepResearchPromptOverrides);
+    } catch (error) {
+      handleError(error);
+      return {} as DeepResearchPromptOverrides;
+    }
+  }
+
+  function getMaxCollectionTopics() {
+    const { maxCollectionTopics } = useSettingStore.getState();
+    const value = Number(maxCollectionTopics);
+    if (!Number.isFinite(value)) {
+      return 5;
+    }
+    return Math.max(1, Math.min(20, Math.floor(value)));
+  }
+
+  function getAutoReviewRounds() {
+    const { autoReviewRounds } = useSettingStore.getState();
+    const value = Number(autoReviewRounds);
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(5, Math.floor(value)));
+  }
+
+  function getReportPreferenceRequirement(
+    reportStyle: "balanced" | "executive" | "technical" | "concise",
+    reportLength: "brief" | "standard" | "comprehensive"
+  ) {
+    const stylePrompts: Record<
+      "balanced" | "executive" | "technical" | "concise",
+      string
+    > = {
+      balanced:
+        "Keep a balanced writing style with clear explanations, practical examples, and moderate technical depth.",
+      executive:
+        "Prioritize decision-ready insights. Begin sections with key findings and focus on business impact, risks, and recommendations.",
+      technical:
+        "Prioritize technical depth and precision. Include implementation details, tradeoffs, assumptions, and limitations.",
+      concise:
+        "Be concise and direct. Eliminate filler and keep each section tightly focused on essential information.",
+    };
+    const lengthPrompts: Record<"brief" | "standard" | "comprehensive", string> =
+      {
+        brief:
+          "Keep the report compact while preserving critical insights and evidence.",
+        standard:
+          "Write a standard-length report with good depth and practical detail.",
+        comprehensive:
+          "Write a comprehensive report with deep coverage, detailed analysis, and thorough supporting context.",
+      };
+
+    return [
+      "Additional report preferences:",
+      `- Style: ${stylePrompts[reportStyle]}`,
+      `- Length: ${lengthPrompts[reportLength]}`,
+    ].join("\n");
+  }
+
+  async function generateSearchSettings(searchModel: string) {
+    const { provider, enableSearch, searchProvider, searchMaxResult } =
+      useSettingStore.getState();
+
+    if (enableSearch === "1" && searchProvider === "model") {
+      const createModel = (model: string) => {
+        // Enable Gemini's built-in search tool
+        if (
+          ["google", "google-vertex"].includes(provider) &&
+          isNetworkingModel(model)
+        ) {
+          return createModelProvider(model, { useSearchGrounding: true });
+        } else {
+          return createModelProvider(model);
+        }
+      };
+      const getTools = (model: string) => {
+        // Enable OpenAI's built-in search tool
+        if (
+          ["openai", "azure", "openaicompatible"].includes(provider) &&
+          (model.startsWith("gpt-4o") ||
+            model.startsWith("gpt-4.1") ||
+            model.startsWith("gpt-5"))
+        ) {
+          return {
+            web_search_preview: openai.tools.webSearchPreview({
+              // optional configuration:
+              searchContextSize: searchMaxResult > 5 ? "high" : "medium",
+            }),
+          } as Tools;
+        }
+      };
+      const getProviderOptions = (model: string) => {
+        // Enable OpenRouter's built-in search tool
+        if (provider === "openrouter") {
+          return {
+            openrouter: {
+              plugins: [
+                {
+                  id: "web",
+                  max_results: searchMaxResult, // Defaults to 5
+                },
+              ],
+            },
+          } as ProviderOptions;
+        } else if (
+          provider === "xai" &&
+          model.startsWith("grok-3") &&
+          !model.includes("mini")
+        ) {
+          return {
+            xai: {
+              search_parameters: {
+                mode: "auto",
+                max_search_results: searchMaxResult,
+              },
+            },
+          } as ProviderOptions;
+        }
+      };
+
+      return {
+        model: await createModel(searchModel),
+        tools: getTools(searchModel),
+        providerOptions: getProviderOptions(searchModel),
+      };
+    } else {
+      return {
+        model: await createModelProvider(searchModel),
+      };
+    }
+  }
+
   async function askQuestions() {
     const { question } = useTaskStore.getState();
     const { thinkingModel } = getModel();
     setStatus(t("research.common.thinking"));
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
+    const promptOverrides = getPromptOverrides();
+    const searchSettings = await generateSearchSettings(thinkingModel);
     const result = streamText({
-      model: await createModelProvider(thinkingModel),
-      system: getSystemPrompt(),
+      ...searchSettings,
+      system: getSystemPrompt(promptOverrides),
       prompt: [
-        generateQuestionsPrompt(question),
+        generateQuestionsPrompt(question, promptOverrides),
         getResponseLanguagePrompt(),
       ].join("\n\n"),
       experimental_transform: smoothTextStream(smoothTextStreamType),
@@ -100,12 +247,15 @@ function useDeepResearch() {
     const { thinkingModel } = getModel();
     setStatus(t("research.common.thinking"));
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
+    const promptOverrides = getPromptOverrides();
+    const searchSettings = await generateSearchSettings(thinkingModel);
     const result = streamText({
-      model: await createModelProvider(thinkingModel),
-      system: getSystemPrompt(),
-      prompt: [writeReportPlanPrompt(query), getResponseLanguagePrompt()].join(
-        "\n\n"
-      ),
+      ...searchSettings,
+      system: getSystemPrompt(promptOverrides),
+      prompt: [
+        writeReportPlanPrompt(query, promptOverrides),
+        getResponseLanguagePrompt(),
+      ].join("\n\n"),
       experimental_transform: smoothTextStream(smoothTextStreamType),
       onError: handleError,
     });
@@ -131,7 +281,11 @@ function useDeepResearch() {
     return content;
   }
 
-  async function searchLocalKnowledges(query: string, researchGoal: string) {
+  async function searchLocalKnowledges(
+    query: string,
+    researchGoal: string,
+    promptOverrides: DeepResearchPromptOverrides = {}
+  ) {
     const { resources } = useTaskStore.getState();
     const knowledgeStore = useKnowledgeStore.getState();
     const knowledges: Knowledge[] = [];
@@ -149,9 +303,14 @@ function useDeepResearch() {
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const searchResult = streamText({
       model: await createModelProvider(networkingModel),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(promptOverrides),
       prompt: [
-        processSearchKnowledgeResultPrompt(query, researchGoal, knowledges),
+        processSearchKnowledgeResultPrompt(
+          query,
+          researchGoal,
+          knowledges,
+          promptOverrides
+        ),
         getResponseLanguagePrompt(),
       ].join("\n\n"),
       experimental_transform: smoothTextStream(smoothTextStreamType),
@@ -181,80 +340,18 @@ function useDeepResearch() {
 
   async function runSearchTask(queries: SearchTask[]) {
     const {
-      provider,
       enableSearch,
       searchProvider,
       parallelSearch,
-      searchMaxResult,
       references,
       onlyUseLocalResource,
     } = useSettingStore.getState();
     const { resources } = useTaskStore.getState();
     const { networkingModel } = getModel();
+    const promptOverrides = getPromptOverrides();
     setStatus(t("research.common.research"));
     const plimit = Plimit(parallelSearch);
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
-    const createModel = (model: string) => {
-      // Enable Gemini's built-in search tool
-      if (
-        enableSearch &&
-        searchProvider === "model" &&
-        provider === "google" &&
-        isNetworkingModel(model)
-      ) {
-        return createModelProvider(model, { useSearchGrounding: true });
-      } else {
-        return createModelProvider(model);
-      }
-    };
-    const getTools = (model: string) => {
-      // Enable OpenAI's built-in search tool
-      if (enableSearch && searchProvider === "model") {
-        if (
-          ["openai", "azure"].includes(provider) &&
-          model.startsWith("gpt-4o")
-        ) {
-          return {
-            web_search_preview: openai.tools.webSearchPreview({
-              // optional configuration:
-              searchContextSize: "medium",
-            }),
-          } as Tools;
-        }
-      }
-      return undefined;
-    };
-    const getProviderOptions = (model: string) => {
-      if (enableSearch && searchProvider === "model") {
-        // Enable OpenRouter's built-in search tool
-        if (provider === "openrouter") {
-          return {
-            openrouter: {
-              plugins: [
-                {
-                  id: "web",
-                  max_results: searchMaxResult, // Defaults to 5
-                },
-              ],
-            },
-          } as ProviderOptions;
-        } else if (
-          provider === "xai" &&
-          model.startsWith("grok-3") &&
-          !model.includes("mini")
-        ) {
-          return {
-            xai: {
-              search_parameters: {
-                mode: "auto",
-                max_search_results: searchMaxResult,
-              },
-            },
-          } as ProviderOptions;
-        }
-      }
-      return undefined;
-    };
     await Promise.all(
       queries.map((item) => {
         plimit(async () => {
@@ -268,7 +365,8 @@ function useDeepResearch() {
           if (resources.length > 0) {
             const knowledges = await searchLocalKnowledges(
               item.query,
-              item.researchGoal
+              item.researchGoal,
+              promptOverrides
             );
             content += [
               knowledges,
@@ -289,7 +387,7 @@ function useDeepResearch() {
             }
           }
 
-          if (enableSearch) {
+          if (enableSearch === "1") {
             if (searchProvider !== "model") {
               try {
                 const results = await search(item.query);
@@ -311,14 +409,15 @@ function useDeepResearch() {
               const enableReferences =
                 sources.length > 0 && references === "enable";
               searchResult = streamText({
-                model: await createModel(networkingModel),
-                system: getSystemPrompt(),
+                model: await createModelProvider(networkingModel),
+                system: getSystemPrompt(promptOverrides),
                 prompt: [
                   processSearchResultPrompt(
                     item.query,
                     item.researchGoal,
                     sources,
-                    enableReferences
+                    enableReferences,
+                    promptOverrides
                   ),
                   getResponseLanguagePrompt(),
                 ].join("\n\n"),
@@ -326,15 +425,20 @@ function useDeepResearch() {
                 onError: handleError,
               });
             } else {
+              const searchSettings = await generateSearchSettings(
+                networkingModel
+              );
               searchResult = streamText({
-                model: await createModel(networkingModel),
-                system: getSystemPrompt(),
+                ...searchSettings,
+                system: getSystemPrompt(promptOverrides),
                 prompt: [
-                  processResultPrompt(item.query, item.researchGoal),
+                  processResultPrompt(
+                    item.query,
+                    item.researchGoal,
+                    promptOverrides
+                  ),
                   getResponseLanguagePrompt(),
                 ].join("\n\n"),
-                tools: getTools(networkingModel),
-                providerOptions: getProviderOptions(networkingModel),
                 experimental_transform: smoothTextStream(smoothTextStreamType),
                 onError: handleError,
               });
@@ -342,9 +446,13 @@ function useDeepResearch() {
           } else {
             searchResult = streamText({
               model: await createModelProvider(networkingModel),
-              system: getSystemPrompt(),
+              system: getSystemPrompt(promptOverrides),
               prompt: [
-                processResultPrompt(item.query, item.researchGoal),
+                processResultPrompt(
+                  item.query,
+                  item.researchGoal,
+                  promptOverrides
+                ),
                 getResponseLanguagePrompt(),
               ].join("\n\n"),
               experimental_transform: smoothTextStream(smoothTextStreamType),
@@ -436,14 +544,20 @@ function useDeepResearch() {
   async function reviewSearchResult() {
     const { reportPlan, tasks, suggestion } = useTaskStore.getState();
     const { thinkingModel } = getModel();
+    const promptOverrides = getPromptOverrides();
     setStatus(t("research.common.research"));
     const learnings = tasks.map((item) => item.learning);
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const result = streamText({
       model: await createModelProvider(thinkingModel),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(promptOverrides),
       prompt: [
-        reviewSerpQueriesPrompt(reportPlan, learnings, suggestion),
+        reviewSerpQueriesPrompt(
+          reportPlan,
+          learnings,
+          suggestion,
+          promptOverrides
+        ),
         getResponseLanguagePrompt(),
       ].join("\n\n"),
       experimental_transform: smoothTextStream(smoothTextStreamType),
@@ -474,6 +588,7 @@ function useDeepResearch() {
                   ...pick(item, ["query", "researchGoal"]),
                 })
               );
+              queries = queries.slice(0, getMaxCollectionTopics());
             }
           }
         },
@@ -486,11 +601,19 @@ function useDeepResearch() {
     if (queries.length > 0) {
       taskStore.update([...tasks, ...queries]);
       await runSearchTask(queries);
+      return queries.length;
     }
+    return 0;
   }
 
   async function writeFinalReport() {
-    const { citationImage, references } = useSettingStore.getState();
+    const {
+      citationImage,
+      references,
+      useFileFormatResource,
+      reportStyle,
+      reportLength,
+    } = useSettingStore.getState();
     const {
       reportPlan,
       tasks,
@@ -502,6 +625,7 @@ function useDeepResearch() {
     } = useTaskStore.getState();
     const { save } = useHistoryStore.getState();
     const { thinkingModel } = getModel();
+    const promptOverrides = getPromptOverrides();
     setStatus(t("research.common.writing"));
     updateFinalReport("");
     setTitle("");
@@ -517,24 +641,85 @@ function useDeepResearch() {
     );
     const enableCitationImage = images.length > 0 && citationImage === "enable";
     const enableReferences = sources.length > 0 && references === "enable";
+    const enableFileFormatResource = useFileFormatResource === "enable";
+    const mergedRequirement = [
+      requirement,
+      getReportPreferenceRequirement(reportStyle, reportLength),
+    ]
+      .filter((item) => item.trim().length > 0)
+      .join("\n\n");
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
+
+    const sourceList = enableReferences
+      ? sources.map((item) => pick(item, ["title", "url"]))
+      : [];
+    const imageList = enableCitationImage ? images : [];
+    const file = new File(
+      [
+        [
+          `<LEARNINGS>\n${learnings
+            .map((detail) => `<learning>\n${detail}\n</learning>`)
+            .join("\n")}\n</LEARNINGS>`,
+          `<SOURCES>\n${sourceList
+            .map(
+              (item, idx) =>
+                `<source index="${idx + 1}" url="${item.url}">\n${
+                  item.title
+                }\n</source>`
+            )
+            .join("\n")}\n</SOURCES>`,
+          `<IMAGES>\n${imageList
+            .map(
+              (source, idx) =>
+                `${idx + 1}. ![${source.description}](${source.url})`
+            )
+            .join("\n")}\n</IMAGES>`,
+        ].join("\n\n"),
+      ],
+      "resources.md",
+      { type: "text/markdown" }
+    );
+    const fileData = await file.arrayBuffer();
+    const messageContent: UserContent = [
+      {
+        type: "text",
+        text: [
+          writeFinalReportPrompt(
+            reportPlan,
+            learnings,
+            sourceList,
+            imageList,
+            mergedRequirement,
+            enableCitationImage,
+            enableReferences,
+            enableFileFormatResource,
+            promptOverrides
+          ),
+          getResponseLanguagePrompt(),
+        ].join("\n\n"),
+      },
+    ];
+    if (enableFileFormatResource) {
+      messageContent.push({
+        type: "file",
+        mimeType: "text/markdown",
+        filename: "resources.md",
+        data: fileData,
+      });
+    }
+
     const result = streamText({
       model: await createModelProvider(thinkingModel),
-      system: [getSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
-      prompt: [
-        writeFinalReportPrompt(
-          reportPlan,
-          learnings,
-          enableReferences
-            ? sources.map((item) => pick(item, ["title", "url"]))
-            : [],
-          enableCitationImage ? images : [],
-          requirement,
-          enableCitationImage,
-          enableReferences
-        ),
-        getResponseLanguagePrompt(),
+      system: [
+        getSystemPrompt(promptOverrides),
+        getOutputGuidelinesPrompt(promptOverrides),
       ].join("\n\n"),
+      messages: [
+        {
+          role: "user",
+          content: messageContent,
+        },
+      ],
       temperature: 0.5,
       experimental_transform: smoothTextStream(smoothTextStreamType),
       onError: handleError,
@@ -590,14 +775,15 @@ function useDeepResearch() {
   async function deepResearch() {
     const { reportPlan } = useTaskStore.getState();
     const { thinkingModel } = getModel();
+    const promptOverrides = getPromptOverrides();
     setStatus(t("research.common.thinking"));
     try {
       const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
       const result = streamText({
         model: await createModelProvider(thinkingModel),
-        system: getSystemPrompt(),
+        system: getSystemPrompt(promptOverrides),
         prompt: [
-          generateSerpQueriesPrompt(reportPlan),
+          generateSerpQueriesPrompt(reportPlan, promptOverrides),
           getResponseLanguagePrompt(),
         ].join("\n\n"),
         experimental_transform: smoothTextStream(smoothTextStreamType),
@@ -629,6 +815,7 @@ function useDeepResearch() {
                       ...pick(item, ["query", "researchGoal"]),
                     })
                   );
+                  queries = queries.slice(0, getMaxCollectionTopics());
                   taskStore.update(queries);
                 }
               }
@@ -640,7 +827,17 @@ function useDeepResearch() {
         );
       }
       if (reasoning) console.log(reasoning);
-      await runSearchTask(queries);
+      if (queries.length > 0) {
+        await runSearchTask(queries);
+        let remainingAutoRounds = getAutoReviewRounds();
+        while (remainingAutoRounds > 0) {
+          const generatedQueries = await reviewSearchResult();
+          if (generatedQueries === 0) {
+            break;
+          }
+          remainingAutoRounds -= 1;
+        }
+      }
     } catch (err) {
       console.error(err);
     }

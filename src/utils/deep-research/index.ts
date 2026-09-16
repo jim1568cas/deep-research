@@ -1,9 +1,10 @@
-import { streamText, generateText } from "ai";
+import { streamText, generateText, type UserContent } from "ai";
 import { type GoogleGenerativeAIProviderMetadata } from "@ai-sdk/google";
 import { createAIProvider } from "./provider";
 import { createSearchProvider } from "./search";
 import {
   getSystemPrompt,
+  getOutputGuidelinesPrompt,
   writeReportPlanPrompt,
   generateSerpQueriesPrompt,
   processResultPrompt,
@@ -11,7 +12,10 @@ import {
   writeFinalReportPrompt,
   getSERPQuerySchema,
 } from "./prompts";
-import { outputGuidelinesPrompt } from "@/constants/prompts";
+import {
+  parseDeepResearchPromptOverrides,
+  type DeepResearchPromptOverrides,
+} from "@/constants/prompts";
 import { isNetworkingModel } from "@/utils/model";
 import { ThinkTagStreamProcessor, removeJsonMarkdown } from "@/utils/text";
 import { pick, unique, flat, isFunction } from "radash";
@@ -31,6 +35,7 @@ export interface DeepResearchOptions {
     maxResult?: number;
   };
   language?: string;
+  promptOverrides?: DeepResearchPromptOverrides | string;
   onMessage?: (event: string, data: any) => void;
 }
 
@@ -70,9 +75,13 @@ function addQuoteBeforeAllLine(text: string = "") {
 
 class DeepResearch {
   protected options: DeepResearchOptions;
+  promptOverrides: DeepResearchPromptOverrides = {};
   onMessage: (event: string, data: any) => void = () => {};
   constructor(options: DeepResearchOptions) {
     this.options = options;
+    this.promptOverrides = parseDeepResearchPromptOverrides(
+      options.promptOverrides
+    );
     if (isFunction(options.onMessage)) {
       this.onMessage = options.onMessage;
     }
@@ -95,7 +104,7 @@ class DeepResearch {
       provider: AIProvider.provider,
       model: AIProvider.taskModel,
       settings:
-        AIProvider.provider === "google" &&
+        ["google", "google-vertex"].includes(AIProvider.provider) &&
         isNetworkingModel(AIProvider.taskModel)
           ? { useSearchGrounding: true }
           : undefined,
@@ -114,9 +123,9 @@ class DeepResearch {
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const result = streamText({
       model: await this.getThinkingModel(),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(this.promptOverrides),
       prompt: [
-        writeReportPlanPrompt(query),
+        writeReportPlanPrompt(query, this.promptOverrides),
         this.getResponseLanguagePrompt(),
       ].join("\n\n"),
     });
@@ -154,9 +163,9 @@ class DeepResearch {
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const { text } = await generateText({
       model: await this.getThinkingModel(),
-      system: getSystemPrompt(),
+      system: getSystemPrompt(this.promptOverrides),
       prompt: [
-        generateSerpQueriesPrompt(reportPlan),
+        generateSerpQueriesPrompt(reportPlan, this.promptOverrides),
         this.getResponseLanguagePrompt(),
       ].join("\n\n"),
     });
@@ -210,8 +219,10 @@ class DeepResearch {
           // Enable OpenAI's built-in search tool
           if (
             provider === "model" &&
-            ["openai", "azure"].includes(taskModel) &&
-            taskModel.startsWith("gpt-4o")
+            ["openai", "azure", "openaicompatible"].includes(taskModel) &&
+            (taskModel.startsWith("gpt-4o") ||
+              taskModel.startsWith("gpt-4.1") ||
+              taskModel.startsWith("gpt-5"))
           ) {
             const { openai } = await import("@ai-sdk/openai");
             return {
@@ -244,9 +255,13 @@ class DeepResearch {
 
         searchResult = streamText({
           model: await this.getTaskModel(),
-          system: getSystemPrompt(),
+          system: getSystemPrompt(this.promptOverrides),
           prompt: [
-            processResultPrompt(item.query, item.researchGoal),
+            processResultPrompt(
+              item.query,
+              item.researchGoal,
+              this.promptOverrides
+            ),
             this.getResponseLanguagePrompt(),
           ].join("\n\n"),
           tools: await getTools(),
@@ -256,6 +271,7 @@ class DeepResearch {
         try {
           const result = await createSearchProvider({
             query: item.query,
+            promptOverrides: this.promptOverrides,
             ...this.options.searchProvider,
           });
 
@@ -269,13 +285,14 @@ class DeepResearch {
         }
         searchResult = streamText({
           model: await this.getTaskModel(),
-          system: getSystemPrompt(),
+          system: getSystemPrompt(this.promptOverrides),
           prompt: [
             processSearchResultPrompt(
               item.query,
               item.researchGoal,
               sources,
-              sources.length > 0 && enableReferences
+              sources.length > 0 && enableReferences,
+              this.promptOverrides
             ),
             this.getResponseLanguagePrompt(),
           ].join("\n\n"),
@@ -385,7 +402,8 @@ class DeepResearch {
     reportPlan: string,
     tasks: DeepResearchSearchResult[],
     enableCitationImage = true,
-    enableReferences = true
+    enableReferences = true,
+    enableFileFormatResource = true
   ): Promise<FinalReportResult> {
     this.onMessage("progress", { step: "final-report", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
@@ -398,21 +416,79 @@ class DeepResearch {
       flat(tasks.map((item) => item.images || [])),
       (item) => item.url
     );
+
+    const sourceList = enableReferences
+      ? sources.map((item) => pick(item, ["title", "url"]))
+      : [];
+    const imageList = enableCitationImage ? images : [];
+    const file = new File(
+      [
+        [
+          `<LEARNINGS>\n${learnings
+            .map((detail) => `<learning>\n${detail}\n</learning>`)
+            .join("\n")}\n</LEARNINGS>`,
+          `<SOURCES>\n${sourceList
+            .map(
+              (item, idx) =>
+                `<source index="${idx + 1}" url="${item.url}">\n${
+                  item.title
+                }\n</source>`
+            )
+            .join("\n")}\n</SOURCES>`,
+          `<IMAGES>\n${imageList
+            .map(
+              (source, idx) =>
+                `${idx + 1}. ![${source.description}](${source.url})`
+            )
+            .join("\n")}\n</IMAGES>`,
+        ].join("\n\n"),
+      ],
+      "resources.md",
+      { type: "text/markdown" }
+    );
+    const fileData = await file.arrayBuffer();
+
+    const messageContent: UserContent = [
+      {
+        type: "text",
+        text: [
+          writeFinalReportPrompt(
+            reportPlan,
+            learnings,
+            sourceList,
+            imageList,
+            "",
+            imageList.length > 0 && enableCitationImage,
+            sourceList.length > 0 && enableReferences,
+            enableFileFormatResource,
+            this.promptOverrides
+          ),
+          this.getResponseLanguagePrompt(),
+        ].join("\n\n"),
+      },
+    ];
+    if (enableFileFormatResource) {
+      messageContent.push({
+        type: "file",
+        mimeType: "text/markdown",
+        filename: "resources.md",
+        data: fileData,
+      });
+    }
+
     const result = streamText({
       model: await this.getThinkingModel(),
-      system: [getSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
-      prompt: [
-        writeFinalReportPrompt(
-          reportPlan,
-          learnings,
-          sources.map((item) => pick(item, ["title", "url"])),
-          images,
-          "",
-          images.length > 0 && enableCitationImage,
-          sources.length > 0 && enableReferences
-        ),
-        this.getResponseLanguagePrompt(),
+      system: [
+        getSystemPrompt(this.promptOverrides),
+        getOutputGuidelinesPrompt(this.promptOverrides),
       ].join("\n\n"),
+      messages: [
+        {
+          role: "user",
+          content: messageContent,
+        },
+      ],
+      temperature: 0.5,
     });
     let content = "";
     this.onMessage("message", { type: "text", text: "<final-report>\n" });
@@ -475,7 +551,8 @@ class DeepResearch {
   async start(
     query: string,
     enableCitationImage = true,
-    enableReferences = true
+    enableReferences = true,
+    enableFileFormatResource = false
   ) {
     try {
       const reportPlan = await this.writeReportPlan(query);
@@ -485,7 +562,8 @@ class DeepResearch {
         reportPlan,
         results,
         enableCitationImage,
-        enableReferences
+        enableReferences,
+        enableFileFormatResource
       );
       return finalReport;
     } catch (err) {

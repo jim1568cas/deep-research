@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import DeepResearch from "@/utils/deep-research";
 import { multiApiKeyPolling } from "@/utils/model";
+import { parseDeepResearchPromptOverrides } from "@/constants/prompts";
 import {
   getAIProviderBaseURL,
   getAIProviderApiKey,
@@ -32,7 +33,17 @@ export async function POST(req: NextRequest) {
     maxResult,
     enableCitationImage = true,
     enableReferences = true,
+    enableFileFormatResource = false,
+    promptOverrides,
   } = await req.json();
+  let parsedPromptOverrides = {};
+  try {
+    parsedPromptOverrides = parseDeepResearchPromptOverrides(promptOverrides);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid prompt overrides";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 
   const encoder = new TextEncoder();
   const readableStream = new ReadableStream({
@@ -62,6 +73,7 @@ export async function POST(req: NextRequest) {
           provider: searchProvider,
           maxResult,
         },
+        promptOverrides: parsedPromptOverrides,
         onMessage: (event, data) => {
           if (event === "progress") {
             console.log(
@@ -75,8 +87,6 @@ export async function POST(req: NextRequest) {
           } else if (event === "error") {
             console.error(data);
             controller.close();
-          } else {
-            console.warn(`Unknown event: ${event}`);
           }
           controller.enqueue(
             encoder.encode(
@@ -91,7 +101,12 @@ export async function POST(req: NextRequest) {
       });
 
       try {
-        await deepResearch.start(query, enableCitationImage, enableReferences);
+        await deepResearch.start(
+          query,
+          enableCitationImage,
+          enableReferences,
+          enableFileFormatResource
+        );
       } catch (err) {
         throw new Error(err instanceof Error ? err.message : "Unknown error");
       }

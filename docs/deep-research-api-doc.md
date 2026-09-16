@@ -42,7 +42,7 @@ interface Config {
   thinkingModel: string;
   // Task model id
   taskModel: string;
-  // Search provider, Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
+  // Search provider, Possible values ​​include: model, tavily, firecrawl, crw, exa, bocha, searxng
   searchProvider: string;
   // Response Language, also affects the search language. (optional)
   language?: string;
@@ -52,6 +52,22 @@ interface Config {
   enableCitationImage?: boolean;
   // Whether to include citation links in search results and final reports. Default, `true`. (optional)
   enableReferences?: boolean;
+  // Override built-in prompt templates. You can provide one or more prompt keys as needed. (optional)
+  promptOverrides?: Partial<{
+    systemInstruction: string;
+    outputGuidelinesPrompt: string;
+    systemQuestionPrompt: string;
+    reportPlanPrompt: string;
+    serpQueriesPrompt: string;
+    queryResultPrompt: string;
+    citationRulesPrompt: string;
+    searchResultPrompt: string;
+    searchKnowledgeResultPrompt: string;
+    reviewPrompt: string;
+    finalReportCitationImagePrompt: string;
+    finalReportReferencesPrompt: string;
+    finalReportPrompt: string;
+  }>;
 }
 ```
 
@@ -306,6 +322,10 @@ fetchEventSource("/api/sse", {
     maxResult: 5,
     enableCitationImage: true,
     enableReferences: true,
+    promptOverrides: {
+      systemInstruction:
+        "You are an expert researcher. Keep answers concise and evidence-driven.",
+    },
   }),
   signal: ctrl.signal,
   onmessage(msg) {

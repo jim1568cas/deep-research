@@ -22,7 +22,7 @@ GOOGLE_PRIVATE_KEY_ID=
 
 # (Optional) Server-side OpenRouter API Key (Required for server API calls)
 OPENROUTER_API_KEY=
-# (Optional) Server-side OpenRouter API Proxy URL. Default, `https://openrouter.ai`
+# (Optional) Server-side OpenRouter API Proxy URL. Default, `https://openrouter.ai/api`
 OPENROUTER_API_BASE_URL=
 
 # (Optional) Server-side OpenAI API Key (Required for server API calls)
@@ -39,6 +39,11 @@ ANTHROPIC_API_BASE_URL=
 DEEPSEEK_API_KEY=
 # (Optional) Server-side DeepSeek API Proxy URL. Default, `https://api.deepseek.com`
 DEEPSEEK_API_BASE_URL=
+
+# (Optional) Server-side Atlas Cloud API Key (Required for server API calls)
+ATLASCLOUD_API_KEY=
+# (Optional) Server-side Atlas Cloud API Proxy URL. Default, `https://api.atlascloud.ai`
+ATLASCLOUD_API_BASE_URL=
 
 # (Optional) Server-side XAI API Key (Required for server API calls)
 XAI_API_KEY=
@@ -78,6 +83,11 @@ FIRECRAWL_API_KEY=
 # (Optional) Server-side Firecrawl API Proxy URL. Default, `https://api.firecrawl.dev`
 FIRECRAWL_API_BASE_URL=
 
+# (Optional) Server-side fastCRW API Key (Required for server API calls)
+CRW_API_KEY=
+# (Optional) Server-side fastCRW API Proxy URL. Default, `https://fastcrw.com/api`
+CRW_API_BASE_URL=
+
 # (Optional) Server-side Exa API Key (Required for server API calls)
 EXA_API_KEY=
 # (Optional) Server-side Exa API Proxy URL. Default, `https://api.exa.ai`
@@ -88,14 +98,19 @@ BOCHA_API_KEY=
 # (Optional) Server-side Bocha API Proxy URL. Default, `https://api.bochaai.com`
 BOCHA_API_BASE_URL=
 
+# (Optional) Server-side Brave API Key (Required for server API calls)
+BRAVE_API_KEY=
+# (Optional) Server-side Brave API Proxy URL. Default, `https://api.search.brave.com/res`
+BRAVE_API_BASE_URL=
+
 # (Optional) Server-side Searxng API Proxy URL. Default, `http://0.0.0.0:8080`
 SEARXNG_API_BASE_URL=
 
 # (Optional) MCP Server AI provider
-# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
+# Possible values ​​include: google, openai, anthropic, deepseek, atlascloud, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
 MCP_AI_PROVIDER=
 # (Optional) MCP Server search provider. Default, `model`
-# Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
+# Possible values ​​include: model, tavily, firecrawl, crw, exa, bocha, searxng
 MCP_SEARCH_PROVIDER=
 # (Optional) MCP Server thinking model id, the core model used in deep research.
 MCP_THINKING_MODEL=
@@ -103,10 +118,10 @@ MCP_THINKING_MODEL=
 MCP_TASK_MODEL=
 
 # (Optional) Disable server-side AI provider usage permissions
-# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
+# Possible values ​​include: google, openai, anthropic, deepseek, atlascloud, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
 NEXT_PUBLIC_DISABLED_AI_PROVIDER=
 # (Optional) Disable server-side search provider usage permissions
-# Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
+# Possible values ​​include: model, tavily, firecrawl, crw, exa, bocha, searxng
 NEXT_PUBLIC_DISABLED_SEARCH_PROVIDER=
 # (Optional) Customize the model list, add or delete models
 NEXT_PUBLIC_MODEL_LIST=

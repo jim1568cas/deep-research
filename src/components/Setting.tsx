@@ -31,6 +31,7 @@ import {
   FormLabel,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -57,17 +58,21 @@ import {
   OPENAI_BASE_URL,
   ANTHROPIC_BASE_URL,
   DEEPSEEK_BASE_URL,
+  ATLASCLOUD_BASE_URL,
   XAI_BASE_URL,
   MISTRAL_BASE_URL,
   POLLINATIONS_BASE_URL,
   OLLAMA_BASE_URL,
   TAVILY_BASE_URL,
   FIRECRAWL_BASE_URL,
+  CRW_BASE_URL,
   EXA_BASE_URL,
   BOCHA_BASE_URL,
+  BRAVE_BASE_URL,
   SEARXNG_BASE_URL,
 } from "@/constants/urls";
 import locales from "@/constants/locales";
+import { parseDeepResearchPromptOverrides } from "@/constants/prompts";
 import {
   filterThinkingModelList,
   filterNetworkingModelList,
@@ -124,6 +129,10 @@ const formSchema = z.object({
   deepseekApiProxy: z.string().optional(),
   deepseekThinkingModel: z.string().optional(),
   deepseekNetworkingModel: z.string().optional(),
+  atlasCloudApiKey: z.string().optional(),
+  atlasCloudApiProxy: z.string().optional(),
+  atlasCloudThinkingModel: z.string().optional(),
+  atlasCloudNetworkingModel: z.string().optional(),
   xAIApiKey: z.string().optional(),
   xAIApiProxy: z.string().optional(),
   xAIThinkingModel: z.string().optional(),
@@ -155,15 +164,23 @@ const formSchema = z.object({
   tavilyScope: z.string().optional(),
   firecrawlApiKey: z.string().optional(),
   firecrawlApiProxy: z.string().optional(),
+  crwApiKey: z.string().optional(),
+  crwApiProxy: z.string().optional(),
   exaApiKey: z.string().optional(),
   exaApiProxy: z.string().optional(),
   exaScope: z.string().optional(),
   bochaApiKey: z.string().optional(),
   bochaApiProxy: z.string().optional(),
+  braveApiKey: z.string().optional(),
+  braveApiProxy: z.string().optional(),
   searxngApiProxy: z.string().optional(),
   searxngScope: z.string().optional(),
   parallelSearch: z.number().min(1).max(5),
+  autoReviewRounds: z.number().min(0).max(5),
+  maxCollectionTopics: z.number().min(1).max(20),
   searchMaxResult: z.number().min(1).max(10),
+  searchIncludeDomains: z.string().optional(),
+  searchExcludeDomains: z.string().optional(),
   language: z.string().optional(),
   theme: z.string().optional(),
   debug: z.enum(["enable", "disable"]).optional(),
@@ -171,6 +188,12 @@ const formSchema = z.object({
   citationImage: z.enum(["enable", "disable"]).optional(),
   smoothTextStreamType: z.enum(["character", "word", "line"]).optional(),
   onlyUseLocalResource: z.enum(["enable", "disable"]).optional(),
+  useFileFormatResource: z.enum(["enable", "disable"]).optional(),
+  reportStyle: z
+    .enum(["balanced", "executive", "technical", "concise"])
+    .optional(),
+  reportLength: z.enum(["brief", "standard", "comprehensive"]).optional(),
+  deepResearchPromptOverrides: z.string().optional(),
 });
 
 function convertModelName(name: string) {
@@ -231,6 +254,8 @@ function Setting({ open, onClose }: SettingProps) {
       return filterOpenRouterModelList(modelList);
     } else if (provider === "deepseek") {
       return filterDeepSeekModelList(modelList);
+    } else if (provider === "atlascloud") {
+      return filterDeepSeekModelList(modelList);
     } else if (provider === "mistral") {
       return filterMistralModelList(modelList);
     } else if (provider === "pollinations") {
@@ -272,23 +297,23 @@ function Setting({ open, onClose }: SettingProps) {
           : [];
       return disabledAIProviders.includes(provider);
     },
-    [mode]
+    [mode],
   );
 
   const isDisabledAIModel = useCallback(
     (model: string) => {
       if (mode === "local") return false;
       const { availableModelList, disabledModelList } = getCustomModelList(
-        MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : []
+        MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : [],
       );
       const isAvailableModel = availableModelList.some(
-        (availableModel) => availableModel === model
+        (availableModel) => availableModel === model,
       );
       if (isAvailableModel) return false;
       if (disabledModelList.includes("all")) return true;
       return disabledModelList.some((disabledModel) => disabledModel === model);
     },
-    [mode]
+    [mode],
   );
 
   const isDisabledSearchProvider = useCallback(
@@ -299,7 +324,7 @@ function Setting({ open, onClose }: SettingProps) {
           : [];
       return disabledSearchProviders.includes(provider);
     },
-    [mode]
+    [mode],
   );
 
   const installPWA = async () => {
@@ -314,6 +339,12 @@ function Setting({ open, onClose }: SettingProps) {
   }
 
   function handleSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      parseDeepResearchPromptOverrides(values.deepResearchPromptOverrides);
+    } catch {
+      toast.error(t("setting.promptOverridesInvalid"));
+      return;
+    }
     update(values);
     onClose();
   }
@@ -476,6 +507,11 @@ function Setting({ open, onClose }: SettingProps) {
                             {!isDisabledAIProvider("deepseek") ? (
                               <SelectItem value="deepseek">DeepSeek</SelectItem>
                             ) : null}
+                            {!isDisabledAIProvider("atlascloud") ? (
+                              <SelectItem value="atlascloud">
+                                Atlas Cloud
+                              </SelectItem>
+                            ) : null}
                             {!isDisabledAIProvider("xai") ? (
                               <SelectItem value="xai">xAI Grok</SelectItem>
                             ) : null}
@@ -541,7 +577,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "apiKey",
-                                  form.getValues("apiKey")
+                                  form.getValues("apiKey"),
                                 )
                               }
                             />
@@ -564,7 +600,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "apiProxy",
-                                  form.getValues("apiProxy")
+                                  form.getValues("apiProxy"),
                                 )
                               }
                             />
@@ -596,7 +632,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "googleVertexProject",
-                                  form.getValues("googleVertexProject")
+                                  form.getValues("googleVertexProject"),
                                 )
                               }
                             />
@@ -622,7 +658,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "googleVertexLocation",
-                                  form.getValues("googleVertexLocation")
+                                  form.getValues("googleVertexLocation"),
                                 )
                               }
                             />
@@ -645,7 +681,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "googleClientEmail",
-                                  form.getValues("googleClientEmail")
+                                  form.getValues("googleClientEmail"),
                                 )
                               }
                             />
@@ -669,7 +705,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "googlePrivateKey",
-                                  form.getValues("googlePrivateKey")
+                                  form.getValues("googlePrivateKey"),
                                 )
                               }
                             />
@@ -692,7 +728,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "googlePrivateKeyId",
-                                  form.getValues("googlePrivateKeyId")
+                                  form.getValues("googlePrivateKeyId"),
                                 )
                               }
                             />
@@ -725,7 +761,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "openRouterApiKey",
-                                  form.getValues("openRouterApiKey")
+                                  form.getValues("openRouterApiKey"),
                                 )
                               }
                             />
@@ -748,7 +784,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "openRouterApiProxy",
-                                  form.getValues("openRouterApiProxy")
+                                  form.getValues("openRouterApiProxy"),
                                 )
                               }
                             />
@@ -781,7 +817,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "openAIApiKey",
-                                  form.getValues("openAIApiKey")
+                                  form.getValues("openAIApiKey"),
                                 )
                               }
                             />
@@ -804,7 +840,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "openAIApiProxy",
-                                  form.getValues("openAIApiProxy")
+                                  form.getValues("openAIApiProxy"),
                                 )
                               }
                             />
@@ -837,7 +873,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "anthropicApiKey",
-                                  form.getValues("anthropicApiKey")
+                                  form.getValues("anthropicApiKey"),
                                 )
                               }
                             />
@@ -860,7 +896,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "anthropicApiProxy",
-                                  form.getValues("anthropicApiProxy")
+                                  form.getValues("anthropicApiProxy"),
                                 )
                               }
                             />
@@ -893,7 +929,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "deepseekApiKey",
-                                  form.getValues("deepseekApiKey")
+                                  form.getValues("deepseekApiKey"),
                                 )
                               }
                             />
@@ -916,7 +952,63 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "deepseekApiProxy",
-                                  form.getValues("deepseekApiProxy")
+                                  form.getValues("deepseekApiProxy"),
+                                )
+                              }
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div
+                    className={cn("space-y-4", {
+                      hidden: provider !== "atlascloud",
+                    })}
+                  >
+                    <FormField
+                      control={form.control}
+                      name="atlasCloudApiKey"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiKeyLabel")}
+                            <span className="ml-1 text-red-500 max-sm:hidden">
+                              *
+                            </span>
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Password
+                              type="text"
+                              placeholder={t("setting.apiKeyPlaceholder")}
+                              {...field}
+                              onBlur={() =>
+                                updateSetting(
+                                  "atlasCloudApiKey",
+                                  form.getValues("atlasCloudApiKey"),
+                                )
+                              }
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="atlasCloudApiProxy"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiUrlLabel")}
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Input
+                              placeholder={ATLASCLOUD_BASE_URL}
+                              {...field}
+                              onBlur={() =>
+                                updateSetting(
+                                  "atlasCloudApiProxy",
+                                  form.getValues("atlasCloudApiProxy"),
                                 )
                               }
                             />
@@ -949,7 +1041,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "xAIApiKey",
-                                  form.getValues("xAIApiKey")
+                                  form.getValues("xAIApiKey"),
                                 )
                               }
                             />
@@ -972,7 +1064,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "xAIApiProxy",
-                                  form.getValues("xAIApiProxy")
+                                  form.getValues("xAIApiProxy"),
                                 )
                               }
                             />
@@ -1005,7 +1097,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "mistralApiKey",
-                                  form.getValues("mistralApiKey")
+                                  form.getValues("mistralApiKey"),
                                 )
                               }
                             />
@@ -1028,7 +1120,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "mistralApiProxy",
-                                  form.getValues("mistralApiProxy")
+                                  form.getValues("mistralApiProxy"),
                                 )
                               }
                             />
@@ -1061,7 +1153,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "azureApiKey",
-                                  form.getValues("azureApiKey")
+                                  form.getValues("azureApiKey"),
                                 )
                               }
                             />
@@ -1087,7 +1179,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "azureResourceName",
-                                  form.getValues("azureResourceName")
+                                  form.getValues("azureResourceName"),
                                 )
                               }
                             />
@@ -1110,7 +1202,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "azureApiVersion",
-                                  form.getValues("azureApiVersion")
+                                  form.getValues("azureApiVersion"),
                                 )
                               }
                             />
@@ -1143,7 +1235,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "openAICompatibleApiKey",
-                                  form.getValues("openAICompatibleApiKey")
+                                  form.getValues("openAICompatibleApiKey"),
                                 )
                               }
                             />
@@ -1166,7 +1258,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "openAICompatibleApiProxy",
-                                  form.getValues("openAICompatibleApiProxy")
+                                  form.getValues("openAICompatibleApiProxy"),
                                 )
                               }
                             />
@@ -1195,7 +1287,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "pollinationsApiProxy",
-                                  form.getValues("pollinationsApiProxy")
+                                  form.getValues("pollinationsApiProxy"),
                                 )
                               }
                             />
@@ -1224,7 +1316,7 @@ function Setting({ open, onClose }: SettingProps) {
                               onBlur={() =>
                                 updateSetting(
                                   "ollamaApiProxy",
-                                  form.getValues("ollamaApiProxy")
+                                  form.getValues("ollamaApiProxy"),
                                 )
                               }
                             />
@@ -1260,7 +1352,7 @@ function Setting({ open, onClose }: SettingProps) {
                             onBlur={() =>
                               updateSetting(
                                 "accessPassword",
-                                form.getValues("accessPassword")
+                                form.getValues("accessPassword"),
                               )
                             }
                           />
@@ -1300,7 +1392,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1384,7 +1476,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1474,7 +1566,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1558,7 +1650,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1704,7 +1796,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1788,7 +1880,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1878,7 +1970,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -1943,7 +2035,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2014,7 +2106,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2098,7 +2190,181 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
+                                  )}
+                                />
+                              </SelectTrigger>
+                              <SelectContent className="max-sm:max-h-72">
+                                {networkingModelList[0].length > 0 ? (
+                                  <SelectGroup>
+                                    <SelectLabel>
+                                      {t("setting.recommendedModels")}
+                                    </SelectLabel>
+                                    {networkingModelList[0].map((name) => {
+                                      return !isDisabledAIModel(name) ? (
+                                        <SelectItem key={name} value={name}>
+                                          {convertModelName(name)}
+                                        </SelectItem>
+                                      ) : null;
+                                    })}
+                                  </SelectGroup>
+                                ) : null}
+                                <SelectGroup>
+                                  <SelectLabel>
+                                    {t("setting.basicModels")}
+                                  </SelectLabel>
+                                  {networkingModelList[1].map((name) => {
+                                    return !isDisabledAIModel(name) ? (
+                                      <SelectItem key={name} value={name}>
+                                        {convertModelName(name)}
+                                      </SelectItem>
+                                    ) : null;
+                                  })}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              className={cn("w-full", {
+                                hidden: modelList.length > 0,
+                              })}
+                              type="button"
+                              variant="outline"
+                              disabled={isRefreshing}
+                              onClick={() => fetchModelList()}
+                            >
+                              {isRefreshing ? (
+                                <>
+                                  <RefreshCw className="animate-spin" />{" "}
+                                  {t("setting.modelListLoading")}
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw /> {t("setting.refresh")}
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div
+                  className={cn("space-y-4", {
+                    hidden: provider !== "atlascloud",
+                  })}
+                >
+                  <FormField
+                    control={form.control}
+                    name="atlasCloudThinkingModel"
+                    render={({ field }) => (
+                      <FormItem className="from-item">
+                        <FormLabel className="from-label">
+                          <HelpTip tip={t("setting.thinkingModelTip")}>
+                            {t("setting.thinkingModel")}
+                            <span className="ml-1 text-red-500 max-sm:hidden">
+                              *
+                            </span>
+                          </HelpTip>
+                        </FormLabel>
+                        <FormControl>
+                          <div className="form-field w-full">
+                            <Select
+                              value={field.value}
+                              onValueChange={field.onChange}
+                            >
+                              <SelectTrigger
+                                className={cn({
+                                  hidden: modelList.length === 0,
+                                })}
+                              >
+                                <SelectValue
+                                  placeholder={t(
+                                    "setting.modelListLoadingPlaceholder",
+                                  )}
+                                />
+                              </SelectTrigger>
+                              <SelectContent className="max-sm:max-h-72">
+                                {thinkingModelList[0].length > 0 ? (
+                                  <SelectGroup>
+                                    <SelectLabel>
+                                      {t("setting.recommendedModels")}
+                                    </SelectLabel>
+                                    {thinkingModelList[0].map((name) => {
+                                      return !isDisabledAIModel(name) ? (
+                                        <SelectItem key={name} value={name}>
+                                          {convertModelName(name)}
+                                        </SelectItem>
+                                      ) : null;
+                                    })}
+                                  </SelectGroup>
+                                ) : null}
+                                <SelectGroup>
+                                  <SelectLabel>
+                                    {t("setting.basicModels")}
+                                  </SelectLabel>
+                                  {thinkingModelList[1].map((name) => {
+                                    return !isDisabledAIModel(name) ? (
+                                      <SelectItem key={name} value={name}>
+                                        {convertModelName(name)}
+                                      </SelectItem>
+                                    ) : null;
+                                  })}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              className={cn("w-full", {
+                                hidden: modelList.length > 0,
+                              })}
+                              type="button"
+                              variant="outline"
+                              disabled={isRefreshing}
+                              onClick={() => fetchModelList()}
+                            >
+                              {isRefreshing ? (
+                                <>
+                                  <RefreshCw className="animate-spin" />{" "}
+                                  {t("setting.modelListLoading")}
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw /> {t("setting.refresh")}
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="atlasCloudNetworkingModel"
+                    render={({ field }) => (
+                      <FormItem className="from-item">
+                        <FormLabel className="from-label">
+                          <HelpTip tip={t("setting.networkingModelTip")}>
+                            {t("setting.networkingModel")}
+                            <span className="ml-1 text-red-500 max-sm:hidden">
+                              *
+                            </span>
+                          </HelpTip>
+                        </FormLabel>
+                        <FormControl>
+                          <div className="form-field w-full">
+                            <Select
+                              value={field.value}
+                              onValueChange={field.onChange}
+                            >
+                              <SelectTrigger
+                                className={cn({
+                                  hidden: modelList.length === 0,
+                                })}
+                              >
+                                <SelectValue
+                                  placeholder={t(
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2188,7 +2454,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2253,7 +2519,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2324,7 +2590,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2408,7 +2674,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2560,7 +2826,7 @@ function Setting({ open, onClose }: SettingProps) {
                                 <SelectTrigger>
                                   <SelectValue
                                     placeholder={t(
-                                      "setting.modelListLoadingPlaceholder"
+                                      "setting.modelListLoadingPlaceholder",
                                     )}
                                   />
                                 </SelectTrigger>
@@ -2625,7 +2891,7 @@ function Setting({ open, onClose }: SettingProps) {
                                 <SelectTrigger>
                                   <SelectValue
                                     placeholder={t(
-                                      "setting.modelListLoadingPlaceholder"
+                                      "setting.modelListLoadingPlaceholder",
                                     )}
                                   />
                                 </SelectTrigger>
@@ -2688,7 +2954,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2772,7 +3038,7 @@ function Setting({ open, onClose }: SettingProps) {
                               >
                                 <SelectValue
                                   placeholder={t(
-                                    "setting.modelListLoadingPlaceholder"
+                                    "setting.modelListLoadingPlaceholder",
                                   )}
                                 />
                               </SelectTrigger>
@@ -2870,7 +3136,7 @@ function Setting({ open, onClose }: SettingProps) {
                                 <SelectTrigger>
                                   <SelectValue
                                     placeholder={t(
-                                      "setting.modelListLoadingPlaceholder"
+                                      "setting.modelListLoadingPlaceholder",
                                     )}
                                   />
                                 </SelectTrigger>
@@ -2935,7 +3201,7 @@ function Setting({ open, onClose }: SettingProps) {
                                 <SelectTrigger>
                                   <SelectValue
                                     placeholder={t(
-                                      "setting.modelListLoadingPlaceholder"
+                                      "setting.modelListLoadingPlaceholder",
                                     )}
                                   />
                                 </SelectTrigger>
@@ -3034,9 +3300,16 @@ function Setting({ open, onClose }: SettingProps) {
                                 Firecrawl
                               </SelectItem>
                             ) : null}
+                            {!isDisabledSearchProvider("crw") ? (
+                              <SelectItem value="crw">fastCRW</SelectItem>
+                            ) : null}
                             {!isDisabledSearchProvider("exa") &&
                             mode === "proxy" ? (
                               <SelectItem value="exa">Exa</SelectItem>
+                            ) : null}
+                            {!isDisabledSearchProvider("brave") &&
+                            mode === "proxy" ? (
+                              <SelectItem value="brave">Brave</SelectItem>
                             ) : null}
                             {!isDisabledSearchProvider("bocha") ? (
                               <SelectItem value="bocha">
@@ -3166,6 +3439,52 @@ function Setting({ open, onClose }: SettingProps) {
                           <FormControl className="form-field">
                             <Input
                               placeholder={FIRECRAWL_BASE_URL}
+                              disabled={form.getValues("enableSearch") === "0"}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div
+                    className={cn("space-y-4", {
+                      hidden: searchProvider !== "crw",
+                    })}
+                  >
+                    <FormField
+                      control={form.control}
+                      name="crwApiKey"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiKeyLabel")}
+                            <span className="ml-1 text-red-500 max-sm:hidden">
+                              *
+                            </span>
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Password
+                              type="text"
+                              placeholder={t("setting.searchApiKeyPlaceholder")}
+                              disabled={form.getValues("enableSearch") === "0"}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="crwApiProxy"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiUrlLabel")}
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Input
+                              placeholder={CRW_BASE_URL}
                               disabled={form.getValues("enableSearch") === "0"}
                               {...field}
                             />
@@ -3315,6 +3634,52 @@ function Setting({ open, onClose }: SettingProps) {
                   </div>
                   <div
                     className={cn("space-y-4", {
+                      hidden: searchProvider !== "brave",
+                    })}
+                  >
+                    <FormField
+                      control={form.control}
+                      name="braveApiKey"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiKeyLabel")}
+                            <span className="ml-1 text-red-500 max-sm:hidden">
+                              *
+                            </span>
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Password
+                              type="text"
+                              placeholder={t("setting.searchApiKeyPlaceholder")}
+                              disabled={form.getValues("enableSearch") === "0"}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="braveApiProxy"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiUrlLabel")}
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Input
+                              placeholder={BRAVE_BASE_URL}
+                              disabled={form.getValues("enableSearch") === "0"}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div
+                    className={cn("space-y-4", {
                       hidden: searchProvider !== "searxng",
                     })}
                   >
@@ -3400,6 +3765,67 @@ function Setting({ open, onClose }: SettingProps) {
                 />
                 <FormField
                   control={form.control}
+                  name="autoReviewRounds"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.autoReviewRoundsTip")}>
+                          {t("setting.autoReviewRounds")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl className="form-field">
+                        <div className="flex h-9">
+                          <Slider
+                            className="flex-1"
+                            value={[field.value]}
+                            max={5}
+                            min={0}
+                            step={1}
+                            disabled={form.getValues("enableSearch") === "0"}
+                            onValueChange={(values) =>
+                              field.onChange(values[0])
+                            }
+                          />
+                          <span className="w-[14%] text-center text-sm leading-10">
+                            {field.value}
+                          </span>
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="maxCollectionTopics"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.maxCollectionTopicsTip")}>
+                          {t("setting.maxCollectionTopics")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl className="form-field">
+                        <div className="flex h-9">
+                          <Slider
+                            className="flex-1"
+                            value={[field.value]}
+                            max={20}
+                            min={1}
+                            step={1}
+                            onValueChange={(values) =>
+                              field.onChange(values[0])
+                            }
+                          />
+                          <span className="w-[14%] text-center text-sm leading-10">
+                            {field.value}
+                          </span>
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="searchMaxResult"
                   render={({ field }) => (
                     <FormItem className="from-item">
@@ -3425,6 +3851,58 @@ function Setting({ open, onClose }: SettingProps) {
                             {field.value}
                           </span>
                         </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="searchIncludeDomains"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.searchIncludeDomainsTip")}>
+                          {t("setting.searchIncludeDomains")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={2}
+                          className="form-field"
+                          placeholder={t("setting.searchDomainsPlaceholder")}
+                          disabled={
+                            form.getValues("enableSearch") === "0" ||
+                            form.getValues("searchProvider") === "model"
+                          }
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="searchExcludeDomains"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.searchExcludeDomainsTip")}>
+                          {t("setting.searchExcludeDomains")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={2}
+                          className="form-field"
+                          placeholder={t("setting.searchDomainsPlaceholder")}
+                          disabled={
+                            form.getValues("enableSearch") === "0" ||
+                            form.getValues("searchProvider") === "model"
+                          }
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -3663,6 +4141,71 @@ function Setting({ open, onClose }: SettingProps) {
                 />
                 <FormField
                   control={form.control}
+                  name="reportStyle"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.reportStyleTip")}>
+                          {t("setting.reportStyle")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl>
+                        <Select {...field} onValueChange={field.onChange}>
+                          <SelectTrigger className="form-field">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="balanced">
+                              {t("setting.reportStyleValue.balanced")}
+                            </SelectItem>
+                            <SelectItem value="executive">
+                              {t("setting.reportStyleValue.executive")}
+                            </SelectItem>
+                            <SelectItem value="technical">
+                              {t("setting.reportStyleValue.technical")}
+                            </SelectItem>
+                            <SelectItem value="concise">
+                              {t("setting.reportStyleValue.concise")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="reportLength"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.reportLengthTip")}>
+                          {t("setting.reportLength")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl>
+                        <Select {...field} onValueChange={field.onChange}>
+                          <SelectTrigger className="form-field">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="brief">
+                              {t("setting.reportLengthValue.brief")}
+                            </SelectItem>
+                            <SelectItem value="standard">
+                              {t("setting.reportLengthValue.standard")}
+                            </SelectItem>
+                            <SelectItem value="comprehensive">
+                              {t("setting.reportLengthValue.comprehensive")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="onlyUseLocalResource"
                   render={({ field }) => (
                     <FormItem className="from-item">
@@ -3685,6 +4228,56 @@ function Setting({ open, onClose }: SettingProps) {
                             </SelectItem>
                           </SelectContent>
                         </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="useFileFormatResource"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.fileFormatResourceTip")}>
+                          {t("setting.fileFormatResource")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl>
+                        <Select {...field} onValueChange={field.onChange}>
+                          <SelectTrigger className="form-field">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="enable">
+                              {t("setting.enable")}
+                            </SelectItem>
+                            <SelectItem value="disable">
+                              {t("setting.disable")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="deepResearchPromptOverrides"
+                  render={({ field }) => (
+                    <FormItem className="from-item">
+                      <FormLabel className="from-label">
+                        <HelpTip tip={t("setting.promptOverridesTip")}>
+                          {t("setting.promptOverrides")}
+                        </HelpTip>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={8}
+                          className="form-field font-mono text-xs leading-5"
+                          placeholder={t("setting.promptOverridesPlaceholder")}
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
                     </FormItem>
                   )}

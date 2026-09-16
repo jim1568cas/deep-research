@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SEARXNG_BASE_URL } from "@/constants/urls";
+import { BRAVE_BASE_URL } from "@/constants/urls";
 
 export const runtime = "edge";
 export const preferredRegion = [
@@ -13,14 +13,9 @@ export const preferredRegion = [
   "kix1",
 ];
 
-const API_PROXY_BASE_URL = process.env.SEARXNG_API_BASE_URL || SEARXNG_BASE_URL;
+const API_PROXY_BASE_URL = process.env.BRAVE_API_BASE_URL || BRAVE_BASE_URL;
 
 export async function POST(req: NextRequest) {
-  let body;
-  if (req.method.toUpperCase() !== "GET") {
-    const text = await req.text();
-    body = text ? JSON.parse(text) : null;
-  }
   const searchParams = req.nextUrl.searchParams;
   const path = searchParams.getAll("slug");
   searchParams.delete("slug");
@@ -32,10 +27,11 @@ export async function POST(req: NextRequest) {
     const payload: RequestInit = {
       method: req.method,
       headers: {
-        "Content-Type": req.headers.get("Content-Type") || "application/json",
+        Accept: req.headers.get("Accept") || "application/json",
+        "Accept-Encoding": req.headers.get("Accept-Encoding") || "gzip",
+        "X-Subscription-Token": req.headers.get("X-Subscription-Token") || "",
       },
     };
-    if (body) payload.body = JSON.stringify(body);
     const response = await fetch(url, payload);
     return new NextResponse(response.body, response);
   } catch (error) {
@@ -43,7 +39,7 @@ export async function POST(req: NextRequest) {
       console.error(error);
       return NextResponse.json(
         { code: 500, message: error.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
   }
